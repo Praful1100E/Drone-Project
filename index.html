@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Autonomous Drone Navigation - v2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="max-w-6xl mx-auto p-6">
+      <header class="mb-6">
+        <h1 class="text-3xl font-bold">Autonomous Drone Navigation</h1>
+        <p class="text-slate-400">Vision • RL • ROS • PID • Sensor Fusion</p>
+      </header>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-slate-800 p-4 rounded-lg shadow">
+          <h2 class="text-xl font-semibold mb-2">Live Video</h2>
+          <div class="border rounded bg-black">
+            <img id="video" src="/api/video_feed" class="w-full" alt="video feed" />
+          </div>
+          <p class="mt-2 text-slate-400 text-sm">If no webcam is available, frames are simulated.</p>
+        </div>
+
+        <div class="bg-slate-800 p-4 rounded-lg shadow">
+          <h2 class="text-xl font-semibold mb-2">Model Upload</h2>
+          <form id="modelForm" class="flex gap-2 items-center">
+            <input id="modelFile" type="file" accept=".pt,.pth,.zip" class="text-sm" />
+            <button id="uploadBtn" class="bg-cyan-400 text-slate-900 px-3 py-2 rounded font-bold">Upload</button>
+          </form>
+          <p id="modelStatus" class="mt-3 text-slate-300">No model loaded.</p>
+
+          <hr class="my-3 border-slate-700"/>
+
+          <h3 class="font-semibold">ROS Subscribe</h3>
+          <div class="flex gap-2 mt-2">
+            <input id="rosTopic" placeholder="/topic_name" class="flex-1 rounded px-2 py-1 bg-slate-700"/>
+            <button id="rosSubBtn" class="bg-cyan-400 text-slate-900 px-3 py-1 rounded font-bold">Subscribe</button>
+          </div>
+          <p id="rosStatus" class="mt-2 text-slate-300">ROS: not connected</p>
+        </div>
+
+        <div class="bg-slate-800 p-4 rounded-lg shadow md:col-span-2">
+          <h2 class="text-xl font-semibold mb-2">Telemetry</h2>
+          <pre id="telemetry" class="bg-black p-3 rounded text-sm max-h-64 overflow-auto"></pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const modelForm = document.getElementById('modelForm');
+      const modelFile = document.getElementById('modelFile');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const modelStatus = document.getElementById('modelStatus');
+      const rosTopic = document.getElementById('rosTopic');
+      const rosSubBtn = document.getElementById('rosSubBtn');
+      const rosStatus = document.getElementById('rosStatus');
+      const telemetryEl = document.getElementById('telemetry');
+
+      modelForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!modelFile.files.length) return alert('Choose a model file');
+        uploadBtn.disabled = true;
+        const fd = new FormData();
+        fd.append('file', modelFile.files[0]);
+        const res = await fetch('/api/upload_model', {method: 'POST', body: fd});
+        if (!res.ok) {
+          const j = await res.json();
+          modelStatus.textContent = 'Upload error: ' + (j.detail || 'unknown');
+        } else {
+          const j = await res.json();
+          modelStatus.textContent = 'Loaded: ' + (j.path || j.detail);
+        }
+        uploadBtn.disabled = false;
+      });
+
+      rosSubBtn.addEventListener('click', async () => {
+        const topic = rosTopic.value.trim();
+        if (!topic) return alert('Enter topic');
+        rosSubBtn.disabled = true;
+        const res = await fetch('/api/ros/subscribe', {method: 'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({topic})});
+        const j = await res.json();
+        rosStatus.textContent = j.detail || JSON.stringify(j);
+        rosSubBtn.disabled = false;
+      });
+
+      const ws = new WebSocket(`ws://${location.host}/ws/telemetry`);
+      ws.onmessage = (ev) => {
+        const txt = ev.data;
+        telemetryEl.textContent = txt + '\n' + telemetryEl.textContent;
+      };
+    </script>
+  </body>
+</html>
